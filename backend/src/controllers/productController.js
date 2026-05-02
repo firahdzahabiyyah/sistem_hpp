@@ -14,7 +14,8 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const result = await productService.createProduct(req.body);
-    res.json(result);
+    // return a stable JSON shape
+    return res.json({ product: result.product, total: result.total });
   } catch (err) { console.error('POST /api/products error', err); res.status(400).json({ error: err.message }); }
 });
 

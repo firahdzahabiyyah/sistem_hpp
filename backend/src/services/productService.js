@@ -35,7 +35,8 @@ async function createProduct({ name, details }) {
   }
   product.total_food_cost = total;
   await product.save();
-  return { product, total };
+  // return plain JSON to avoid serializing Sequelize instances with circular refs
+  return { product: product.toJSON(), total };
 }
 
 module.exports = { listProducts, createProduct, computeCostPrice };
