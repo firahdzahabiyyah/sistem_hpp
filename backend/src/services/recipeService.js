@@ -31,4 +31,10 @@ async function createRecipe({ name, details }) {
   return { recipe, total };
 }
 
-module.exports = { listRecipes, createRecipe, computeCostPrice };
+async function getRecipeById(id) {
+  const recipe = await Recipe.findByPk(id, { include: ['details'] });
+  if (!recipe) throw new Error('Recipe not found');
+  return recipe;
+}
+
+module.exports = { listRecipes, createRecipe, getRecipeById, computeCostPrice };

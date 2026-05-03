@@ -16,4 +16,11 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+router.get('/:id', async (req, res) => {
+  try {
+    const item = await service.getRecipeById(req.params.id);
+    res.json(item);
+  } catch (err) { res.status(404).json({ error: err.message }); }
+});
+
 module.exports = router;

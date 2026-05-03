@@ -12,6 +12,18 @@ async function createRecipe(payload){
   return res.json()
 }
 
+async function getRecipes(){
+  const res = await fetch(BASE + '/recipes')
+  if (!res.ok) return []
+  return res.json()
+}
+
+async function getRecipeById(id){
+  const res = await fetch(BASE + '/recipes/' + id)
+  if (!res.ok) return null
+  return res.json()
+}
+
 async function getProducts(){
   const res = await fetch(BASE + '/products')
   if (!res.ok) return []
@@ -78,5 +90,5 @@ async function getProductHPP(id){
   return res.json()
 }
 
-export default { getIngredients, createRecipe, getProducts, createProduct, getLabor, createLabor, updateLabor, deleteLabor, getOverheads, createOverhead, updateOverhead, deleteOverhead, getProductHPP }
+export default { getIngredients, createRecipe, getRecipes, getRecipeById, getProducts, createProduct, getLabor, createLabor, updateLabor, deleteLabor, getOverheads, createOverhead, updateOverhead, deleteOverhead, getProductHPP }
 
