@@ -15,6 +15,8 @@ app.use('/api/recipes', require('./src/routes/recipes'));
 app.use('/api/ingredients', require('./src/routes/ingredients'));
 app.use('/api/labor', require('./src/routes/labor'));
 app.use('/api/overheads', require('./src/routes/overheads'));
+app.use('/api/sales', require('./src/routes/dailySales'));
+app.use('/api/inventory', require('./src/routes/inventories'));
 
 app.get('/', (req, res) => res.json({ ok: true }));
 

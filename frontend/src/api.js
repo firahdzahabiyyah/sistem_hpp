@@ -90,5 +90,63 @@ async function getProductHPP(id){
   return res.json()
 }
 
-export default { getIngredients, createRecipe, getRecipes, getRecipeById, getProducts, createProduct, getLabor, createLabor, updateLabor, deleteLabor, getOverheads, createOverhead, updateOverhead, deleteOverhead, getProductHPP }
+async function getSales(date){
+  let url = BASE + '/sales'
+  if (date) url += '?date=' + date
+  const res = await fetch(url)
+  if (!res.ok) return []
+  return res.json()
+}
+
+async function createSale(payload){
+  const res = await fetch(BASE + '/sales', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
+  return res.json()
+}
+
+async function deleteSale(id){
+  const res = await fetch(BASE + '/sales/' + id, { method: 'DELETE' })
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
+  return res.json()
+}
+
+async function getSalesSummary(date){
+  let url = BASE + '/sales/summary'
+  if (date) url += '?date=' + date
+  const res = await fetch(url)
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function getSalesHistory(){
+  const res = await fetch(BASE + '/sales/history')
+  if (!res.ok) return []
+  return res.json()
+}
+
+async function getInventory(){
+  const res = await fetch(BASE + '/inventory')
+  if (!res.ok) return []
+  return res.json()
+}
+
+async function saveInventory(payload){
+  const res = await fetch(BASE + '/inventory', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
+  return res.json()
+}
+
+async function deleteInventory(id){
+  const res = await fetch(BASE + '/inventory/' + id, { method: 'DELETE' })
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
+  return res.json()
+}
+
+async function getForecast(date){
+  const res = await fetch(BASE + '/inventory/forecast?date=' + date)
+  if (!res.ok) return null
+  return res.json()
+}
+
+export default { getIngredients, createRecipe, getRecipes, getRecipeById, getProducts, createProduct, getLabor, createLabor, updateLabor, deleteLabor, getOverheads, createOverhead, updateOverhead, deleteOverhead, getProductHPP, getSales, createSale, deleteSale, getSalesSummary, getSalesHistory, getInventory, saveInventory, deleteInventory, getForecast }
 

@@ -16,26 +16,40 @@ async function listProducts() {
   }
 }
 
-async function createProduct({ name, details }) {
+async function createProduct({ name, details, portions = 1 }) {
   if (!name) throw new Error('name is required');
   if (!Array.isArray(details)) details = [];
 
-  // accept portions if provided
-  const portions = parseInt(arguments[0].portions) || 1
-  const product = await Product.create({ name, portions });
+  const portionsInt = parseInt(portions) || 1;
+  const product = await Product.create({ name, portions: portionsInt });
   let total = 0;
+  
+  console.log('Creating product:', { name, portions: portionsInt, detailsCount: details.length });
+  
   for (const d of details) {
     try {
-      const cost_price = computeCostPrice(d);
-      total += cost_price;
-      await ProductDetail.create({ ...d, cost_price, productId: product.id });
+      const detailData = {
+        name: d.name || '',
+        usage: parseFloat(d.usage) || 0,
+        unit: d.unit || '',
+        net_weight: parseFloat(d.net_weight) || 0,
+        gross_weight: parseFloat(d.gross_weight) || 0,
+        price: parseFloat(d.price) || 0,
+        cost_price: 0,
+        productId: product.id
+      };
+      detailData.cost_price = computeCostPrice(detailData);
+      total += detailData.cost_price;
+      
+      const created = await ProductDetail.create(detailData);
+      console.log('Created ProductDetail:', created.id, detailData.name);
     } catch (inner) {
       console.error('createProduct - detail error', inner, d);
     }
   }
   product.total_food_cost = total;
   await product.save();
-  // return plain JSON to avoid serializing Sequelize instances with circular refs
+  console.log('Product created with ID:', product.id, 'total_food_cost:', total);
   return { product: product.toJSON(), total };
 }
 

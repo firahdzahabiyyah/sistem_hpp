@@ -23,4 +23,11 @@ router.get('/:id', async (req, res) => {
   } catch (err) { res.status(404).json({ error: err.message }); }
 });
 
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await service.deleteRecipe(req.params.id);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 module.exports = router;

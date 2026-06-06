@@ -37,4 +37,11 @@ async function getRecipeById(id) {
   return recipe;
 }
 
-module.exports = { listRecipes, createRecipe, getRecipeById, computeCostPrice };
+async function deleteRecipe(id) {
+  const recipe = await Recipe.findByPk(id, { include: ['details'] });
+  if (!recipe) throw new Error('Recipe not found');
+  await recipe.destroy();
+  return { success: true };
+}
+
+module.exports = { listRecipes, createRecipe, getRecipeById, deleteRecipe, computeCostPrice };

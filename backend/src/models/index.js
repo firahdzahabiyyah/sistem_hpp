@@ -14,15 +14,18 @@ const Product = require('./product')(sequelize, DataTypes);
 const ProductDetail = require('./productDetail')(sequelize, DataTypes);
 const Labor = require('./labor')(sequelize, DataTypes);
 const Overhead = require('./overhead')(sequelize, DataTypes);
+const DailySale = require('./dailySale')(sequelize, DataTypes);
+const Inventory = require('./inventory')(sequelize, DataTypes);
 
 // Associations
 Recipe.hasMany(RecipeDetail, { as: 'details', foreignKey: 'recipeId' });
 RecipeDetail.belongsTo(Recipe, { foreignKey: 'recipeId' });
-RecipeDetail.belongsTo(Ingredient, { foreignKey: 'ingredientId' });
 
 Product.hasMany(ProductDetail, { as: 'details', foreignKey: 'productId' });
 ProductDetail.belongsTo(Product, { foreignKey: 'productId' });
-ProductDetail.belongsTo(Ingredient, { foreignKey: 'ingredientId' });
+
+Product.hasMany(DailySale, { foreignKey: 'productId' });
+DailySale.belongsTo(Product, { foreignKey: 'productId' });
 
 module.exports = {
   sequelize,
@@ -33,5 +36,7 @@ module.exports = {
   Product,
   ProductDetail,
   Labor,
-  Overhead
+  Overhead,
+  DailySale,
+  Inventory
 };
