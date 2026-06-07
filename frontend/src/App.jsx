@@ -1,7 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import emailjs from '@emailjs/browser'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faBell, faMoon, faSun, faChevronDown } from '@fortawesome/free-solid-svg-icons'
 import api from './api'
 import Landing from './Landing'
-import KPICard from './ui/KPICard'
+import locales from './locales'
+import DashboardPage from './pages/DashboardPage'
+import Logo from './ui/Logo'
+import HelpCenterWidget from './components/HelpCenterWidget'
 
 const formatCurrency = (value) => {
   let locale = 'id-ID'
@@ -11,30 +18,80 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value || 0)
 }
 
-const businessTypes = ['Kuliner', 'Jasa', 'Retail', 'Fashion', 'Kerajinan', 'Pertanian', 'Lainnya']
-const businessStatuses = ['Pemilik Usaha', 'Reseller', 'Tidak Punya Usaha']
+const getBusinessTypes = (lang) => locales[lang]?.businessTypes || ['Kuliner', 'Jasa', 'Retail', 'Fashion', 'Kerajinan', 'Pertanian', 'Lainnya']
+const getBusinessStatuses = (lang) => locales[lang]?.businessStatuses || ['Pemilik Usaha', 'Reseller', 'Tidak Punya Usaha']
 
 const emptyRegisterForm = { fullName: '', username: '', businessType: '', businessStatus: '', email: '', password: '' }
 const emptyLoginForm = { identifier: '', password: '', remember: true }
 const defaultDisplayPreferences = { theme: 'light', currencyFormat: 'id-ID', defaultMargin: 30 }
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function AuthPage({ mode, onModeChange, onLogin, onRegister }) {
+function AuthPage({ mode, onModeChange, onLogin, onRegister, lang }) {
   const isRegister = mode === 'register'
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm)
   const [loginForm, setLoginForm] = useState(emptyLoginForm)
   const [errors, setErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
+  const [forgotPasswordError, setForgotPasswordError] = useState('')
+  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState(false)
+  const t = locales[lang]
 
   const updateRegister = (field, value) => { setRegisterForm(c => ({ ...c, [field]: value })); setErrors(c => ({ ...c, [field]: '' })) }
   const updateLogin = (field, value) => { setLoginForm(c => ({ ...c, [field]: value })); setErrors(c => ({ ...c, [field]: '' })) }
 
+  const handleForgotPasswordOpen = () => {
+    setIsForgotPasswordOpen(true)
+    setForgotPasswordEmail('')
+    setForgotPasswordError('')
+    setForgotPasswordSuccess(false)
+  }
+
+  const handleForgotPasswordClose = () => {
+    setIsForgotPasswordOpen(false)
+    setForgotPasswordEmail('')
+    setForgotPasswordError('')
+    setForgotPasswordSuccess(false)
+  }
+
+  const handleForgotPasswordSubmit = async (e) => {
+    e.preventDefault()
+    setForgotPasswordError('')
+    
+    if (!forgotPasswordEmail.trim()) {
+      setForgotPasswordError(t.auth_error_required)
+      return
+    }
+    
+    if (!emailPattern.test(forgotPasswordEmail)) {
+      setForgotPasswordError(t.auth_error_email)
+      return
+    }
+    
+    try {
+      await emailjs.send(
+        'Gmail_API',
+        'personal_service',
+        {
+          name: 'Pengguna UMKM Inventra',
+          message: 'Permintaan reset kata sandi dari email: ' + forgotPasswordEmail,
+          email: forgotPasswordEmail,
+        },
+        'UuvQcw1NLismLpZ60'
+      )
+      setForgotPasswordSuccess(true)
+    } catch (err) {
+      setForgotPasswordError('Gagal mengirim email. Silakan coba lagi.')
+    }
+  }
+
   const handleRegisterSubmit = (e) => {
     e.preventDefault()
     const next = {}
-    Object.entries(registerForm).forEach(([field, value]) => { if (!String(value).trim()) next[field] = 'Field ini wajib diisi.' })
-    if (registerForm.email && !emailPattern.test(registerForm.email)) next.email = 'Format email belum benar.'
-    if (registerForm.password && registerForm.password.length < 6) next.password = 'Kata sandi minimal 6 karakter.'
+    Object.entries(registerForm).forEach(([field, value]) => { if (!String(value).trim()) next[field] = t.auth_error_required })
+    if (registerForm.email && !emailPattern.test(registerForm.email)) next.email = t.auth_error_email
+    if (registerForm.password && registerForm.password.length < 6) next.password = t.auth_error_password_length
     if (Object.keys(next).length > 0) { setErrors(next); return }
     const result = onRegister(registerForm)
     if (result?.error) { setErrors({ username: result.error }); return }
@@ -44,48 +101,48 @@ function AuthPage({ mode, onModeChange, onLogin, onRegister }) {
   const handleLoginSubmit = (e) => {
     e.preventDefault()
     const next = {}
-    if (!loginForm.identifier.trim()) next.identifier = 'Masukkan nama pengguna atau email.'
-    if (!loginForm.password.trim()) next.password = 'Masukkan kata sandi.'
+    if (!loginForm.identifier.trim()) next.identifier = t.auth_error_identifier
+    if (!loginForm.password.trim()) next.password = t.auth_error_password
     if (Object.keys(next).length > 0) { setErrors(next); return }
     const result = onLogin(loginForm)
     if (result?.error) setErrors({ form: result.error })
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-8 px-4">
-      <div className="w-full max-w-md animate-slide-up">
+    <>
+    <div className="w-full max-w-md animate-slide-up">
         <div className="card p-8">
           <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-lg shadow-md mx-auto mb-4">UI</div>
-            <h2 className="text-2xl font-bold text-slate-800">{isRegister ? 'Buat Akun Baru' : 'Masuk ke Akun'}</h2>
-            <p className="text-sm text-slate-500 mt-1">{isRegister ? 'Lengkapi data pengguna dan informasi usaha.' : 'Gunakan nama pengguna atau email yang sudah terdaftar.'}</p>
+            <div className="mx-auto mb-4"><Logo size="md" showText={false} center={true} /></div>
+            <h2 className="text-2xl font-bold text-slate-800">{isRegister ? t.auth_register_title : t.auth_login_title}</h2>
+            <p className="text-sm text-slate-500 mt-1">{isRegister ? t.auth_register_desc : t.auth_login_desc}</p>
           </div>
 
           {isRegister ? (
             <form onSubmit={handleRegisterSubmit} className="space-y-4" noValidate>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Nama Lengkap *</label>
-                <input value={registerForm.fullName} onChange={e => updateRegister('fullName', e.target.value)} className={`input-field mt-1.5 ${errors.fullName ? 'input-field-error' : ''}`} placeholder="Nama lengkap" />
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_fullname}</label>
+                <input value={registerForm.fullName} onChange={e => updateRegister('fullName', e.target.value)} className={`input-field mt-1.5 ${errors.fullName ? 'input-field-error' : ''}`} placeholder={t.auth_placeholder_fullname} />
                 {errors.fullName && <p className="mt-1 text-xs text-red-500">{errors.fullName}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Nama Pengguna *</label>
-                <input value={registerForm.username} onChange={e => updateRegister('username', e.target.value)} className={`input-field mt-1.5 ${errors.username ? 'input-field-error' : ''}`} placeholder="misal: umkm_inventra" />
-                <p className="mt-1 text-xs text-slate-400">Nama Pengguna tidak dapat diubah setelah terdaftar</p>
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_username}</label>
+                <input value={registerForm.username} onChange={e => updateRegister('username', e.target.value)} className={`input-field mt-1.5 ${errors.username ? 'input-field-error' : ''}`} placeholder={t.auth_placeholder_username} />
+                <p className="mt-1 text-xs text-slate-400">{t.auth_username_note}</p>
                 {errors.username && <p className="mt-1 text-xs text-red-500">{errors.username}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Jenis Usaha *</label>
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_business_type}</label>
                 <select value={registerForm.businessType} onChange={e => updateRegister('businessType', e.target.value)} className={`select-field mt-1.5 ${errors.businessType ? 'input-field-error' : ''}`}>
-                  <option value="">Pilih jenis usaha</option>
-                  {businessTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="">{t.auth_placeholder_business_type}</option>
+                  {getBusinessTypes(lang).map(bt => <option key={bt} value={bt}>{bt}</option>)}
                 </select>
                 {errors.businessType && <p className="mt-1 text-xs text-red-500">{errors.businessType}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Status Usaha *</label>
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_business_status}</label>
                 <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
-                  {businessStatuses.map(s => (
+                  {getBusinessStatuses(lang).map(s => (
                     <label key={s} className={`cursor-pointer rounded-xl border px-3 py-3 text-sm font-semibold transition-all text-center ${registerForm.businessStatus === s ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm' : 'border-slate-200 text-slate-600 hover:border-primary-300 hover:bg-slate-50'}`}>
                       <input type="radio" name="businessStatus" value={s} checked={registerForm.businessStatus === s} onChange={e => updateRegister('businessStatus', e.target.value)} className="sr-only" />{s}</label>
                   ))}
@@ -93,56 +150,120 @@ function AuthPage({ mode, onModeChange, onLogin, onRegister }) {
                 {errors.businessStatus && <p className="mt-1 text-xs text-red-500">{errors.businessStatus}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Alamat Email *</label>
-                <input type="email" value={registerForm.email} onChange={e => updateRegister('email', e.target.value)} className={`input-field mt-1.5 ${errors.email ? 'input-field-error' : ''}`} placeholder="nama@email.com" />
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_email}</label>
+                <input type="email" value={registerForm.email} onChange={e => updateRegister('email', e.target.value)} className={`input-field mt-1.5 ${errors.email ? 'input-field-error' : ''}`} placeholder={t.auth_placeholder_email} />
                 {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Kata Sandi *</label>
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_password}</label>
                 <div className="relative mt-1.5">
-                  <input type={showPassword ? 'text' : 'password'} value={registerForm.password} onChange={e => updateRegister('password', e.target.value)} className={`input-field pr-24 ${errors.password ? 'input-field-error' : ''}`} placeholder="Minimal 6 karakter" />
-                  <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 rounded-lg">{showPassword ? 'Sembunyikan' : 'Lihat'}</button>
+                  <input type={showPassword ? 'text' : 'password'} value={registerForm.password} onChange={e => updateRegister('password', e.target.value)} className={`input-field pr-24 ${errors.password ? 'input-field-error' : ''}`} placeholder={t.auth_placeholder_password} />
+                  <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 rounded-lg">{showPassword ? t.auth_hide_password : t.auth_show_password}</button>
                 </div>
                 {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password}</p>}
               </div>
-              <button type="submit" className="btn-primary w-full py-3">Daftar</button>
-              <p className="text-center text-sm text-slate-500">Sudah punya akun? <button type="button" onClick={() => onModeChange('login')} className="font-semibold text-primary-600 hover:text-primary-700">Masuk di Sini</button></p>
+              <button type="submit" className="btn-primary w-full py-3">{t.auth_btn_register}</button>
+              <p className="text-center text-sm text-slate-500">{t.auth_have_account} <button type="button" onClick={() => onModeChange('login')} className="font-semibold text-primary-600 hover:text-primary-700">{t.auth_login_link}</button></p>
             </form>
           ) : (
             <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
               {errors.form && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{errors.form}</div>}
               <div>
-                <label className="text-sm font-semibold text-slate-700">Nama Pengguna atau Email</label>
-                <input value={loginForm.identifier} onChange={e => updateLogin('identifier', e.target.value)} className={`input-field mt-1.5 ${errors.identifier ? 'input-field-error' : ''}`} placeholder="username atau email" />
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_identifier}</label>
+                <input value={loginForm.identifier} onChange={e => updateLogin('identifier', e.target.value)} className={`input-field mt-1.5 ${errors.identifier ? 'input-field-error' : ''}`} placeholder={t.auth_placeholder_identifier} />
                 {errors.identifier && <p className="mt-1 text-xs text-red-500">{errors.identifier}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Kata Sandi</label>
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_password}</label>
                 <div className="relative mt-1.5">
-                  <input type={showPassword ? 'text' : 'password'} value={loginForm.password} onChange={e => updateLogin('password', e.target.value)} className={`input-field pr-24 ${errors.password ? 'input-field-error' : ''}`} placeholder="Kata sandi" />
-                  <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 rounded-lg">{showPassword ? 'Sembunyikan' : 'Lihat'}</button>
+                  <input type={showPassword ? 'text' : 'password'} value={loginForm.password} onChange={e => updateLogin('password', e.target.value)} className={`input-field pr-24 ${errors.password ? 'input-field-error' : ''}`} placeholder={t.auth_label_password} />
+                  <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 rounded-lg">{showPassword ? t.auth_hide_password : t.auth_show_password}</button>
                 </div>
                 {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password}</p>}
               </div>
               <div className="flex items-center justify-between gap-4 text-sm">
                 <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
                   <input type="checkbox" checked={loginForm.remember} onChange={e => updateLogin('remember', e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
-                  Tetap Masuk
+                  {t.auth_remember}
                 </label>
-                <button type="button" className="font-semibold text-primary-600 hover:text-primary-700">Lupa kata sandi?</button>
+                <button type="button" onClick={handleForgotPasswordOpen} className="font-semibold text-primary-600 hover:text-primary-700">{t.auth_forgot}</button>
               </div>
-              <button type="submit" className="btn-primary w-full py-3">Masuk</button>
-              <p className="text-center text-sm text-slate-500">Belum punya akun? <button type="button" onClick={() => onModeChange('register')} className="font-semibold text-primary-600 hover:text-primary-700">Daftar Sekarang</button></p>
+              <button type="submit" className="btn-primary w-full py-3">{t.auth_btn_login}</button>
+              <p className="text-center text-sm text-slate-500">{t.auth_no_account} <button type="button" onClick={() => onModeChange('register')} className="font-semibold text-primary-600 hover:text-primary-700">{t.auth_register_link}</button></p>
             </form>
           )}
         </div>
       </div>
-    </div>
+
+      {/* Forgot Password Modal */}
+      {isForgotPasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl animate-slide-up">
+            {!forgotPasswordSuccess ? (
+              <>
+                <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                  <h3 className="text-lg font-bold text-slate-800">{t.forgot_password_title}</h3>
+                  <button onClick={handleForgotPasswordClose} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                
+                <div className="p-6">
+                  <p className="text-sm text-slate-600 mb-6">{t.forgot_password_desc}</p>
+                  
+                  <form onSubmit={handleForgotPasswordSubmit} className="space-y-4" noValidate>
+                    <div>
+                      <label className="text-sm font-semibold text-slate-700">{t.forgot_password_label}</label>
+                      <input
+                        type="email"
+                        value={forgotPasswordEmail}
+                        onChange={e => { setForgotPasswordEmail(e.target.value); setForgotPasswordError('') }}
+                        placeholder={t.forgot_password_placeholder}
+                        className={`input-field mt-1.5 ${forgotPasswordError ? 'input-field-error' : ''}`}
+                      />
+                      {forgotPasswordError && <p className="mt-1 text-xs text-red-500">{forgotPasswordError}</p>}
+                    </div>
+                    
+                    <div className="pt-4">
+                      <button
+                        type="submit"
+                        disabled={!forgotPasswordEmail.trim()}
+                        className="w-full px-4 py-2.5 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {t.forgot_password_btn_send}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6 text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
+                    <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-2">{t.forgot_password_success_title}</h3>
+                  <p className="text-sm text-slate-600 mb-6">{t.forgot_password_success_desc}</p>
+                  
+                  <button
+                    onClick={handleForgotPasswordClose}
+                    className="w-full px-4 py-2.5 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-colors"
+                  >
+                    {t.forgot_password_success_btn}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
-function ProfilePage({ currentUser, onUpdateProfile }) {
+function ProfilePage({ currentUser, onUpdateProfile, lang }) {
   if (!currentUser) return null
+  const t = locales[lang]
   const businessName = currentUser.businessName || currentUser.username
   const [isEditing, setIsEditing] = useState(false)
   const [profileForm, setProfileForm] = useState({
@@ -160,8 +281,8 @@ function ProfilePage({ currentUser, onUpdateProfile }) {
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) { setProfileErrors(c => ({ ...c, avatarUrl: 'File harus berupa gambar.' })); return }
-    if (file.size > 1024 * 1024) { setProfileErrors(c => ({ ...c, avatarUrl: 'Ukuran gambar maksimal 1 MB.' })); return }
+    if (!file.type.startsWith('image/')) { setProfileErrors(c => ({ ...c, avatarUrl: t.profile_error_image })); return }
+    if (file.size > 1024 * 1024) { setProfileErrors(c => ({ ...c, avatarUrl: t.profile_error_image_size })); return }
     const reader = new FileReader()
     reader.onload = () => updateProfileField('avatarUrl', reader.result)
     reader.readAsDataURL(file)
@@ -170,30 +291,30 @@ function ProfilePage({ currentUser, onUpdateProfile }) {
   const saveProfile = (e) => {
     e.preventDefault()
     const next = {}
-    if (!profileForm.fullName.trim()) next.fullName = 'Nama lengkap wajib diisi.'
-    if (!profileForm.businessName.trim()) next.businessName = 'Nama UMKM wajib diisi.'
-    if (!profileForm.email.trim()) next.email = 'Email wajib diisi.'
-    if (profileForm.email && !emailPattern.test(profileForm.email)) next.email = 'Format email belum benar.'
-    if (!profileForm.businessType) next.businessType = 'Pilih jenis usaha.'
-    if (!profileForm.businessStatus) next.businessStatus = 'Pilih status usaha.'
+    if (!profileForm.fullName.trim()) next.fullName = t.profile_error_fullname
+    if (!profileForm.businessName.trim()) next.businessName = t.profile_error_business_name
+    if (!profileForm.email.trim()) next.email = t.profile_error_email
+    if (profileForm.email && !emailPattern.test(profileForm.email)) next.email = t.profile_error_email_format
+    if (!profileForm.businessType) next.businessType = t.profile_error_business_type
+    if (!profileForm.businessStatus) next.businessStatus = t.profile_error_business_status
     if (Object.keys(next).length > 0) { setProfileErrors(next); return }
     onUpdateProfile(profileForm)
     setIsEditing(false)
   }
 
   const AvatarDisplay = () => profileForm.avatarUrl
-    ? <img src={profileForm.avatarUrl} alt="Foto profil" className="h-full w-full rounded-full object-cover" />
+    ? <img src={profileForm.avatarUrl} alt={t.profile_avatar_label} className="h-full w-full rounded-full object-cover" />
     : <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A8.966 8.966 0 0112 15c2.21 0 4.235.8 5.879 2.129M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="section-title">Profil UMKM</h1>
-          <p className="section-desc">Detail akun dan informasi usaha yang aktif.</p>
+          <h1 className="section-title">{t.profile_title}</h1>
+          <p className="section-desc">{t.profile_desc}</p>
         </div>
         <button onClick={() => setIsEditing(v => !v)} className={isEditing ? 'btn-secondary text-sm' : 'btn-primary text-sm'}>
-          {isEditing ? 'Batal Edit' : 'Edit Profil'}
+          {isEditing ? t.profile_btn_cancel : t.profile_btn_edit}
         </button>
       </div>
 
@@ -210,11 +331,11 @@ function ProfilePage({ currentUser, onUpdateProfile }) {
               <div className="mt-5 w-full">
                 <label className="flex items-center justify-center gap-2 cursor-pointer rounded-xl border-2 border-dashed border-primary-300 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-700 transition-all hover:bg-primary-100">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  Ganti Foto Profil
+                  {t.profile_avatar_label}
                   <input type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
                 </label>
                 {profileForm.avatarUrl && (
-                  <button type="button" onClick={() => updateProfileField('avatarUrl', '')} className="mt-2 text-sm font-semibold text-red-500 hover:text-red-600">Hapus Foto</button>
+                  <button type="button" onClick={() => updateProfileField('avatarUrl', '')} className="mt-2 text-sm font-semibold text-red-500 hover:text-red-600">{t.profile_delete_photo}</button>
                 )}
                 {profileErrors.avatarUrl && <p className="mt-2 text-xs text-red-500">{profileErrors.avatarUrl}</p>}
               </div>
@@ -225,57 +346,57 @@ function ProfilePage({ currentUser, onUpdateProfile }) {
         <div className="card p-6">
           {isEditing ? (
             <form onSubmit={saveProfile} className="space-y-4" noValidate>
-              <h2 className="text-lg font-semibold text-slate-800">Edit Informasi Akun</h2>
+              <h2 className="text-lg font-semibold text-slate-800">{t.profile_form_title}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700">Nama Lengkap *</label>
+                  <label className="text-sm font-semibold text-slate-700">{t.auth_label_fullname}</label>
                   <input value={profileForm.fullName} onChange={e => updateProfileField('fullName', e.target.value)} className={`input-field mt-1.5 ${profileErrors.fullName ? 'input-field-error' : ''}`} />
                   {profileErrors.fullName && <p className="mt-1 text-xs text-red-500">{profileErrors.fullName}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700">Nama UMKM *</label>
+                  <label className="text-sm font-semibold text-slate-700">{t.profile_field_business_name}</label>
                   <input value={profileForm.businessName} onChange={e => updateProfileField('businessName', e.target.value)} className={`input-field mt-1.5 ${profileErrors.businessName ? 'input-field-error' : ''}`} />
                   {profileErrors.businessName && <p className="mt-1 text-xs text-red-500">{profileErrors.businessName}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700">Nama Pengguna</label>
+                  <label className="text-sm font-semibold text-slate-700">{t.profile_field_username}</label>
                   <input value={currentUser.username} disabled className="input-field mt-1.5 bg-slate-100 text-slate-500 cursor-not-allowed" />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700">Email *</label>
+                  <label className="text-sm font-semibold text-slate-700">{t.auth_label_email}</label>
                   <input type="email" value={profileForm.email} onChange={e => updateProfileField('email', e.target.value)} className={`input-field mt-1.5 ${profileErrors.email ? 'input-field-error' : ''}`} />
                   {profileErrors.email && <p className="mt-1 text-xs text-red-500">{profileErrors.email}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700">Jenis Usaha *</label>
+                  <label className="text-sm font-semibold text-slate-700">{t.auth_label_business_type}</label>
                   <select value={profileForm.businessType} onChange={e => updateProfileField('businessType', e.target.value)} className={`select-field mt-1.5 ${profileErrors.businessType ? 'input-field-error' : ''}`}>
-                    <option value="">Pilih jenis usaha</option>
-                    {businessTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    <option value="">{t.auth_placeholder_business_type}</option>
+                    {getBusinessTypes(lang).map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   {profileErrors.businessType && <p className="mt-1 text-xs text-red-500">{profileErrors.businessType}</p>}
                 </div>
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Status Usaha *</label>
+                <label className="text-sm font-semibold text-slate-700">{t.auth_label_business_status}</label>
                 <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
-                  {businessStatuses.map(s => (
+                  {getBusinessStatuses(lang).map(s => (
                     <label key={s} className={`cursor-pointer rounded-xl border px-3 py-3 text-sm font-semibold text-center transition-all ${profileForm.businessStatus === s ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm' : 'border-slate-200 text-slate-600 hover:border-primary-300 hover:bg-slate-50'}`}>
                       <input type="radio" name="pbs" value={s} checked={profileForm.businessStatus === s} onChange={e => updateProfileField('businessStatus', e.target.value)} className="sr-only" />{s}</label>
                   ))}
                 </div>
                 {profileErrors.businessStatus && <p className="mt-1 text-xs text-red-500">{profileErrors.businessStatus}</p>}
               </div>
-              <button type="submit" className="btn-primary">Simpan Profil</button>
+              <button type="submit" className="btn-primary">{t.profile_save}</button>
             </form>
           ) : (
             <div>
-              <h2 className="text-lg font-semibold text-slate-800">Informasi Akun</h2>
+              <h2 className="text-lg font-semibold text-slate-800">{t.profile_view_title}</h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {[
-                  { label: 'Nama Lengkap', value: currentUser.fullName },
-                  { label: 'Nama UMKM', value: businessName },
-                  { label: 'Email', value: currentUser.email },
-                  { label: 'Jenis Usaha', value: currentUser.businessType },
+                  { label: t.profile_view_fullname, value: currentUser.fullName },
+                  { label: t.profile_view_business_name, value: businessName },
+                  { label: t.auth_label_email, value: currentUser.email },
+                  { label: t.profile_view_business_type, value: currentUser.businessType },
                 ].map((f, i) => (
                   <div key={i} className="rounded-xl bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{f.label}</p>
@@ -291,122 +412,96 @@ function ProfilePage({ currentUser, onUpdateProfile }) {
   )
 }
 
-function SettingsPage({ currentUser, displayPreferences, onChangePassword, onClearSession, onClearAllUsers, onSaveDisplayPreferences }) {
+function SettingsPage({ currentUser, displayPreferences, onChangePassword, onClearSession, onClearAllUsers, onSaveDisplayPreferences, lang }) {
+  const t = locales[lang]
   const [selectedSetting, setSelectedSetting] = useState('')
   const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
   const [passwordErrors, setPasswordErrors] = useState({})
   const [passwordMessage, setPasswordMessage] = useState('')
-  const [preferenceForm, setPreferenceForm] = useState(displayPreferences)
-  const [preferenceMessage, setPreferenceMessage] = useState('')
 
   const updatePasswordField = (field, value) => { setPasswordForm(c => ({ ...c, [field]: value })); setPasswordErrors(c => ({ ...c, [field]: '', form: '' })); setPasswordMessage('') }
-  const updatePreferenceField = (field, value) => { setPreferenceForm(c => ({ ...c, [field]: value })); setPreferenceMessage('') }
 
   const submitPassword = (e) => {
     e.preventDefault()
     const next = {}
-    if (!passwordForm.oldPassword.trim()) next.oldPassword = 'Kata sandi lama wajib diisi.'
-    if (!passwordForm.newPassword.trim()) next.newPassword = 'Kata sandi baru wajib diisi.'
-    if (passwordForm.newPassword && passwordForm.newPassword.length < 6) next.newPassword = 'Minimal 6 karakter.'
-    if (!passwordForm.confirmPassword.trim()) next.confirmPassword = 'Konfirmasi kata sandi wajib diisi.'
-    if (passwordForm.newPassword && passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword) next.confirmPassword = 'Konfirmasi kata sandi tidak sama.'
+    if (!passwordForm.oldPassword.trim()) next.oldPassword = t.settings_error_old_password
+    if (!passwordForm.newPassword.trim()) next.newPassword = t.settings_error_new_password
+    if (passwordForm.newPassword && passwordForm.newPassword.length < 6) next.newPassword = t.settings_error_new_password_length
+    if (!passwordForm.confirmPassword.trim()) next.confirmPassword = t.settings_error_confirm_password
+    if (passwordForm.newPassword && passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword) next.confirmPassword = t.settings_error_confirm_mismatch
     if (Object.keys(next).length > 0) { setPasswordErrors(next); return }
     const result = onChangePassword(passwordForm)
     if (result?.error) { setPasswordErrors({ form: result.error }); return }
     setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' })
-    setPasswordMessage('Kata sandi berhasil diperbarui.')
+    setPasswordMessage(t.settings_password_success)
   }
-
-  const submitPreferences = (e) => { e.preventDefault(); onSaveDisplayPreferences(preferenceForm); setPreferenceMessage('Preferensi tampilan berhasil disimpan.') }
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="section-title">Pengaturan</h1>
-        <p className="section-desc">Kelola keamanan akun, data lokal, dan preferensi tampilan.</p>
+        <h1 className="section-title">{t.settings_title}</h1>
+        <p className="section-desc">{t.settings_desc}</p>
       </div>
 
       {!selectedSetting && (
         <div className="grid gap-4 md:grid-cols-3">
           <button onClick={() => setSelectedSetting('password')} className="card-hover p-6 text-left group">
             <div className="w-12 h-12 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><LockIcon /></div>
-            <h2 className="text-lg font-bold text-slate-800">Edit Password</h2>
-            <p className="mt-2 text-sm text-slate-500">Ganti kata sandi akun login.</p>
+            <h2 className="text-lg font-bold text-slate-800">{t.settings_card_password_title}</h2>
+            <p className="mt-2 text-sm text-slate-500">{t.settings_card_password_desc}</p>
           </button>
           <button onClick={() => setSelectedSetting('reset')} className="card-hover p-6 text-left group">
             <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><TrashIcon /></div>
-            <h2 className="text-lg font-bold text-slate-800">Reset Data Lokal</h2>
-            <p className="mt-2 text-sm text-slate-500">Hapus session atau akun simulasi.</p>
+            <h2 className="text-lg font-bold text-slate-800">{t.settings_card_reset_title}</h2>
+            <p className="mt-2 text-sm text-slate-500">{t.settings_card_reset_desc}</p>
           </button>
-          <button onClick={() => setSelectedSetting('appearance')} className="card-hover p-6 text-left group">
-            <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><SunIcon /></div>
-            <h2 className="text-lg font-bold text-slate-800">Preferensi Tampilan</h2>
-            <p className="mt-2 text-sm text-slate-500">Pilih mode terang atau gelap.</p>
-          </button>
+
         </div>
       )}
 
       {selectedSetting && (
         <button onClick={() => setSelectedSetting('')} className="btn-secondary text-sm">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-          Kembali ke Pengaturan
+          {t.settings_back}
         </button>
       )}
 
       {selectedSetting === 'password' && (
         <form onSubmit={submitPassword} className="card p-6" noValidate>
-          <h2 className="text-lg font-semibold text-slate-800">Edit Password</h2>
-          <p className="mt-1 text-sm text-slate-500">Gunakan kata sandi lama untuk mengganti password akun {currentUser.username}.</p>
+          <h2 className="text-lg font-semibold text-slate-800">{t.settings_password_title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{t.settings_password_desc.replace('{username}', currentUser.username)}</p>
           {passwordErrors.form && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{passwordErrors.form}</div>}
           {passwordMessage && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{passwordMessage}</div>}
           <div className="mt-5 space-y-4 max-w-md">
             <div>
-              <label className="text-sm font-semibold text-slate-700">Kata sandi lama</label>
+              <label className="text-sm font-semibold text-slate-700">{t.settings_label_old_password}</label>
               <input type="password" value={passwordForm.oldPassword} onChange={e => updatePasswordField('oldPassword', e.target.value)} className={`input-field mt-1.5 ${passwordErrors.oldPassword ? 'input-field-error' : ''}`} />
               {passwordErrors.oldPassword && <p className="mt-1 text-xs text-red-500">{passwordErrors.oldPassword}</p>}
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Kata sandi baru</label>
+              <label className="text-sm font-semibold text-slate-700">{t.settings_label_new_password}</label>
               <input type="password" value={passwordForm.newPassword} onChange={e => updatePasswordField('newPassword', e.target.value)} className={`input-field mt-1.5 ${passwordErrors.newPassword ? 'input-field-error' : ''}`} />
               {passwordErrors.newPassword && <p className="mt-1 text-xs text-red-500">{passwordErrors.newPassword}</p>}
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Konfirmasi kata sandi</label>
+              <label className="text-sm font-semibold text-slate-700">{t.settings_label_confirm_password}</label>
               <input type="password" value={passwordForm.confirmPassword} onChange={e => updatePasswordField('confirmPassword', e.target.value)} className={`input-field mt-1.5 ${passwordErrors.confirmPassword ? 'input-field-error' : ''}`} />
               {passwordErrors.confirmPassword && <p className="mt-1 text-xs text-red-500">{passwordErrors.confirmPassword}</p>}
             </div>
           </div>
-          <button type="submit" className="btn-primary mt-5">Simpan Password</button>
+          <button type="submit" className="btn-primary mt-5">{t.settings_btn_save_password}</button>
         </form>
       )}
 
-      {selectedSetting === 'appearance' && (
-        <form onSubmit={submitPreferences} className="card p-6" noValidate>
-          <h2 className="text-lg font-semibold text-slate-800">Preferensi Tampilan</h2>
-          <p className="mt-1 text-sm text-slate-500">Simpan pilihan tampilan untuk dipakai saat membuka aplikasi berikutnya.</p>
-          {preferenceMessage && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{preferenceMessage}</div>}
-          <div className="mt-5 space-y-4 max-w-md">
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Mode Tampilan</label>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {[{ value: 'light', label: 'Terang' }, { value: 'dark', label: 'Gelap' }].map(o => (
-                  <label key={o.value} className={`cursor-pointer rounded-xl border px-4 py-3 text-sm font-semibold text-center transition-all ${preferenceForm.theme === o.value ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-slate-200 text-slate-600 hover:border-primary-300'}`}>
-                    <input type="radio" name="theme" value={o.value} checked={preferenceForm.theme === o.value} onChange={e => updatePreferenceField('theme', e.target.value)} className="sr-only" />{o.label}</label>
-                ))}
-              </div>
-            </div>
-          </div>
-          <button type="submit" className="btn-primary mt-5">Simpan Preferensi</button>
-        </form>
-      )}
+
 
       {selectedSetting === 'reset' && (
         <div className="card p-6 border-red-100">
-          <h2 className="text-lg font-semibold text-slate-800">Reset Data Lokal</h2>
-          <p className="mt-1 text-sm text-slate-500">Data akun simulasi disimpan di LocalStorage browser ini.</p>
+          <h2 className="text-lg font-semibold text-slate-800">{t.settings_reset_title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{t.settings_reset_desc}</p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button onClick={onClearSession} className="btn-secondary text-sm">Hapus Session Login</button>
-            <button onClick={onClearAllUsers} className="btn-danger text-sm">Hapus Semua Akun Simulasi</button>
+            <button onClick={onClearSession} className="btn-secondary text-sm">{t.settings_btn_clear_session}</button>
+            <button onClick={onClearAllUsers} className="btn-danger text-sm">{t.settings_btn_clear_all}</button>
           </div>
         </div>
       )}
@@ -414,45 +509,47 @@ function SettingsPage({ currentUser, displayPreferences, onChangePassword, onCle
   )
 }
 
-function IconButton({ icon, onClick, active }) {
-  return (
-    <button onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${active ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>
-      {icon}
-    </button>
-  )
-}
-
-function NavItem({ icon, label, count }) {
-  return (
-    <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-all duration-200">
-      <span className="flex-shrink-0 w-5 h-5">{icon}</span>
-      <span className="flex-1 text-left">{label}</span>
-      {count !== undefined && <span className="badge-neutral text-xs">{count}</span>}
-    </button>
-  )
-}
-
 function LockIcon() { return <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> }
 function TrashIcon() { return <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> }
-function SunIcon() { return <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg> }
-
-function DashboardIcon() { return <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> }
-function SalesIcon() { return <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg> }
-function StockIcon() { return <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> }
-function SubRecipeIcon() { return <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg> }
-function PriceIcon() { return <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> }
 function CloseIcon() { return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> }
 function PlusIcon() { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg> }
 function TrashSmallIcon() { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> }
 function SearchIcon() { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('landing')
-  const [authMode, setAuthMode] = useState('login')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const path = location.pathname
+
+  const tabToPath = {
+    landing: '/', auth: '/login', dashboard: '/dashboard', sales: '/penjualan',
+    stock: '/stok', subrecipe: '/sub-recipe', pricecalc: '/harga-jual',
+    profile: '/profil', settings: '/pengaturan'
+  }
+  const pathToTab = Object.fromEntries(Object.entries(tabToPath).map(([k, v]) => [v, k]))
+  pathToTab['/register'] = 'auth'
+
+  const activeTab = pathToTab[path] || 'landing'
+  const authMode = path === '/register' ? 'register' : 'login'
+
   const [currentUser, setCurrentUser] = useState((() => { try { return JSON.parse(localStorage.getItem('hpp_current_user')) || null } catch (e) { return null } })())
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [showFabContact, setShowFabContact] = useState(false)
+  const [showHppDropdown, setShowHppDropdown] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState([
+    { id: 1, text: "Bahan baku 'Ayam Fillet' hampir habis!", type: "warning", time: "Baru saja", read: false },
+    { id: 2, text: "Kalkulasi HPP menu 'Mie Ayam Ceker' berhasil diperbarui.", type: "success", time: "5 mnt lalu", read: false },
+    { id: 3, text: "Penjualan hari ini melampaui target.", type: "info", time: "1 jam lalu", read: false },
+  ])
+  const unreadCount = notifications.filter(n => !n.read).length
   const [displayPreferences, setDisplayPreferences] = useState((() => { try { return { ...defaultDisplayPreferences, ...(JSON.parse(localStorage.getItem('hpp_display_preferences')) || {}) } } catch (e) { return defaultDisplayPreferences } })())
+  const [lang, setLang] = useState((() => { try { return localStorage.getItem('hpp_lang') || 'ID' } catch (e) { return 'ID' } })())
+
+  const t = locales[lang]
+
+  useEffect(() => { try { localStorage.setItem('hpp_lang', lang) } catch (e) {} }, [lang])
 
   const [subRecipeRows, setSubRecipeRows] = useState([{ name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
   const [subRecipeName, setSubRecipeName] = useState('')
@@ -487,14 +584,26 @@ export default function App() {
   }
 
   const resetAllRecipes = async () => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus semua resep dasar?')) return
+    if (!window.confirm(t.general_confirm_reset_hpp)) return
     try {
       const recipes = await api.getRecipes()
       for (const r of recipes) await fetch(`http://localhost:4000/api/recipes/${r.id}`, { method: 'DELETE' })
-      setSavedRecipes([])
-      alert('Semua resep dasar telah dihapus!')
-    } catch (e) { alert('Gagal menghapus: ' + e.message) }
+    } catch (e) { console.error(e) }
+    setSavedRecipes([])
+    setProducts([])
+    setSubRecipeRows([{ name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
+    setSubRecipeName('')
+    setFoodCostRows([{ name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
+    setProductName('')
+    setPortions(1)
+    setLaborRows([{ employee_name: '', salary: 0, work_days: 0, cost_per_day: 0 }])
+    setOverheadRows([{ name: '', total_cost: 0, duration_days: 0, cost_per_day: 0 }])
+    setMarginPct(30)
   }
+
+  useEffect(() => {
+    applyTheme(displayPreferences.theme)
+  }, [displayPreferences.theme])
 
   useEffect(() => {
     api.getRecipes().then(setSavedRecipes).catch(() => [])
@@ -513,20 +622,20 @@ export default function App() {
     setSubRecipeRows(copy)
   }
   const addSubRecipeRow = () => setSubRecipeRows([...subRecipeRows, { name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
-  const deleteSubRecipeRow = (i) => setSubRecipeRows(subRecipeRows.filter((_, idx) => idx !== i))
+  const deleteSubRecipeRow = (i) => setSubRecipeRows(prev => prev.filter((_, idx) => idx !== i))
 
   const saveSubRecipe = async () => {
-    if (!subRecipeName.trim()) { alert('Masukkan nama sub-recipe!'); return }
+    if (!subRecipeName.trim()) { alert(t.subrecipe_alert_name); return }
     const hasData = subRecipeRows.some(r => r.name && r.price > 0)
-    if (!hasData) { alert('Masukkan setidaknya satu bahan dengan harga!'); return }
+    if (!hasData) { alert(t.subrecipe_alert_min_one); return }
     const payload = { name: subRecipeName, details: subRecipeRows }
     try {
       const res = await api.createRecipe(payload)
-      alert(`Sub-Recipe "${subRecipeName}" tersimpan! Total: Rp ${formatCurrency(res.total)}`)
+      alert(t.subrecipe_alert_saved.replace('{name}', subRecipeName).replace('{total}', formatCurrency(res.total)))
       setSubRecipeName('')
       setSubRecipeRows([{ name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
       api.getRecipes().then(setSavedRecipes).catch(() => [])
-    } catch (e) { alert('Gagal: ' + (e.message || e)) }
+    } catch (e) { alert(t.subrecipe_alert_failed + (e.message || e)) }
   }
 
   const handleFoodCostNameChange = (i, val) => {
@@ -547,8 +656,8 @@ export default function App() {
     setFoodCostRows(copy)
   }
   const addFoodCostRow = () => setFoodCostRows([...foodCostRows, { name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
-  const deleteFoodCostRow = (i) => setFoodCostRows(foodCostRows.filter((_, idx) => idx !== i))
-  const saveFoodCost = async () => { if (!productName.trim()) { alert('Masukkan nama produk!'); return } alert('Bahan Baku tersimpan!') }
+  const deleteFoodCostRow = (i) => setFoodCostRows(prev => prev.filter((_, idx) => idx !== i))
+  const saveFoodCost = async () => { if (!productName.trim()) { alert(t.pricecalc_alert_product_name); return } alert(t.pricecalc_alert_foodcost_saved) }
 
   const updateLaborRow = (i, field, val) => {
     const copy = [...laborRows]
@@ -562,15 +671,18 @@ export default function App() {
   const deleteLaborRow = async (i) => {
     const labor = laborRows[i]
     if (labor && labor.id) try { await api.deleteLabor(labor.id) } catch (e) { console.error(e) }
-    const newRows = laborRows.filter((_, idx) => idx !== i)
-    setLaborRows(newRows.length === 0 ? [{ employee_name: '', salary: 0, work_days: 1, cost_per_day: 0 }] : newRows)
+    setLaborRows(prev => {
+      const filtered = prev.filter((_, idx) => idx !== i)
+      return filtered.length === 0 ? [{ employee_name: '', salary: 0, work_days: 1, cost_per_day: 0 }] : filtered
+    })
   }
   const saveAllLabor = async () => {
     try {
       for (const labor of laborRows) { if (labor.employee_name && labor.salary > 0) { if (labor.id) await api.updateLabor(labor.id, labor); else await api.createLabor(labor) } }
-      api.getLabor().then(setLaborRows).catch(() => [])
-      alert('Tenaga Kerja tersimpan!')
-    } catch (e) { alert('Gagal: ' + e.message) }
+      setLaborRows([{ employee_name: '', salary: 0, work_days: 1, cost_per_day: 0 }])
+      api.getLabor().catch(() => [])
+      alert(t.pricecalc_alert_labor_saved)
+    } catch (e) { alert(t.pricecalc_alert_failed + e.message) }
   }
 
   const updateOverheadRow = (i, field, val) => {
@@ -582,38 +694,39 @@ export default function App() {
     setOverheadRows(copy)
   }
   const addOverheadRow = () => setOverheadRows([...overheadRows, { name: '', total_cost: 0, duration_days: 0, cost_per_day: 0 }])
-  const deleteOverheadRow = (i) => setOverheadRows(overheadRows.filter((_, idx) => idx !== i))
+  const deleteOverheadRow = (i) => setOverheadRows(prev => prev.filter((_, idx) => idx !== i))
   const saveAllOverhead = async () => {
     try {
       for (const overhead of overheadRows) { if (overhead.name && overhead.total_cost > 0) { if (overhead.id) await api.updateOverhead(overhead.id, overhead); else await api.createOverhead(overhead) } }
-      api.getOverheads().then(setOverheadRows).catch(() => [])
-      alert('Overhead tersimpan!')
-    } catch (e) { alert('Gagal: ' + e.message) }
+      setOverheadRows([{ name: '', total_cost: 0, duration_days: 0, cost_per_day: 0 }])
+      api.getOverheads().catch(() => [])
+      alert(t.pricecalc_alert_overhead_saved)
+    } catch (e) { alert(t.pricecalc_alert_failed + e.message) }
   }
 
   const saveProduct = async () => {
-    if (!productName.trim()) { alert('Masukkan nama produk!'); return }
+    if (!productName.trim()) { alert(t.pricecalc_alert_product_name); return }
     const validDetails = foodCostRows.filter(r => r.name && r.name.trim() !== '')
-    if (validDetails.length === 0) { alert('Masukkan minimal 1 bahan baku!'); return }
+    if (validDetails.length === 0) { alert(t.pricecalc_alert_min_one_ingredient); return }
     try {
       const res = await api.createProduct({ name: productName, portions, details: validDetails })
-      alert(`Produk "${productName}" tersimpan! Total: Rp ${formatCurrency(res.total)}`)
+      alert(t.pricecalc_alert_saved.replace('{name}', productName).replace('{total}', formatCurrency(res.total)))
       setProductName(''); setPortions(1)
       setFoodCostRows([{ name: '', usage: 0, unit: '', net_weight: 0, gross_weight: 0, price: 0, cost_price: 0 }])
       api.getProducts().then(setProducts).catch(() => [])
-    } catch (e) { alert('Gagal: ' + (e.message || e)) }
+    } catch (e) { alert(t.pricecalc_alert_failed + (e.message || e)) }
   }
 
   const readStoredUsers = () => { try { return JSON.parse(localStorage.getItem('hpp_users')) || [] } catch (e) { return [] } }
 
   const handleRegister = (form) => {
     const users = readStoredUsers()
-    if (users.some(u => u.username.toLowerCase() === form.username.toLowerCase())) return { error: 'Nama pengguna sudah terdaftar.' }
-    if (users.some(u => u.email.toLowerCase() === form.email.toLowerCase())) return { error: 'Email sudah terdaftar.' }
+    if (users.some(u => u.username.toLowerCase() === form.username.toLowerCase())) return { error: t.general_error_username_taken }
+    if (users.some(u => u.email.toLowerCase() === form.email.toLowerCase())) return { error: t.general_error_email_taken }
     const newUser = { ...form, id: Date.now(), businessName: form.businessStatus === 'Tidak Punya Usaha' ? form.fullName : form.username }
     localStorage.setItem('hpp_users', JSON.stringify([...users, newUser]))
     localStorage.setItem('hpp_current_user', JSON.stringify(newUser))
-    setCurrentUser(newUser); setAuthMode('login'); setActiveTab('dashboard')
+    setCurrentUser(newUser); navigate('/dashboard')
     return { success: true }
   }
 
@@ -621,15 +734,15 @@ export default function App() {
     const users = readStoredUsers()
     const identifier = form.identifier.toLowerCase()
     const matchedUser = users.find(u => (u.username.toLowerCase() === identifier || u.email.toLowerCase() === identifier) && u.password === form.password)
-    if (!matchedUser) return { error: 'Akun tidak ditemukan atau kata sandi salah.' }
+    if (!matchedUser) return { error: t.general_error_account_not_found }
     setCurrentUser(matchedUser)
     if (form.remember) localStorage.setItem('hpp_current_user', JSON.stringify(matchedUser))
     else localStorage.removeItem('hpp_current_user')
-    setActiveTab('dashboard')
+    navigate('/dashboard')
     return { success: true }
   }
 
-  const handleLogout = () => { localStorage.removeItem('hpp_current_user'); setCurrentUser(null); setShowProfileMenu(false); setAuthMode('login'); setActiveTab('auth') }
+  const handleLogout = () => { localStorage.removeItem('hpp_current_user'); setCurrentUser(null); setShowProfileMenu(false); navigate('/login') }
 
   const handleUpdateProfile = (profileForm) => {
     const updatedUser = { ...currentUser, ...profileForm }
@@ -640,7 +753,7 @@ export default function App() {
   }
 
   const handleChangePassword = ({ oldPassword, newPassword }) => {
-    if (currentUser.password !== oldPassword) return { error: 'Kata sandi lama tidak sesuai.' }
+    if (currentUser.password !== oldPassword) return { error: t.settings_error_old_password_wrong }
     const updatedUser = { ...currentUser, password: newPassword }
     const users = readStoredUsers()
     localStorage.setItem('hpp_users', JSON.stringify(users.map(u => u.id === currentUser.id ? updatedUser : u)))
@@ -649,16 +762,33 @@ export default function App() {
     return { success: true }
   }
 
-  const handleClearSession = () => { if (!window.confirm('Hapus session login saat ini?')) return; handleLogout() }
+  const handleClearSession = () => { if (!window.confirm(t.settings_confirm_clear_session)) return; handleLogout() }
   const handleClearAllUsers = () => {
-    if (!window.confirm('Hapus semua akun simulasi dari LocalStorage browser ini?')) return
+    if (!window.confirm(t.settings_confirm_clear_all)) return
     localStorage.removeItem('hpp_users'); localStorage.removeItem('hpp_current_user')
-    setCurrentUser(null); setShowProfileMenu(false); setAuthMode('login'); setActiveTab('auth')
+    setCurrentUser(null); setShowProfileMenu(false); navigate('/login')
+  }
+
+  const applyTheme = (theme) => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }
+
+  const toggleTheme = () => {
+    const next = displayPreferences.theme === 'dark' ? 'light' : 'dark'
+    const prefs = { ...displayPreferences, theme: next }
+    localStorage.setItem('hpp_display_preferences', JSON.stringify(prefs))
+    applyTheme(next)
+    setDisplayPreferences(prefs)
+  }
+
+  const markAllNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
   }
 
   const handleSaveDisplayPreferences = (preferences) => {
     const normalized = { theme: preferences.theme, currencyFormat: preferences.currencyFormat, defaultMargin: Math.min(100, Math.max(0, parseInt(preferences.defaultMargin) || 0)) }
     localStorage.setItem('hpp_display_preferences', JSON.stringify(normalized))
+    applyTheme(normalized.theme)
     setDisplayPreferences(normalized); setMarginPct(normalized.defaultMargin)
   }
 
@@ -675,68 +805,135 @@ export default function App() {
   const subRecipeTotal = subRecipeRows.reduce((s, r) => s + (r.cost_price || 0), 0)
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
-    { id: 'sales', label: 'Penjualan', icon: <SalesIcon /> },
-    { id: 'stock', label: 'Stok', icon: <StockIcon /> },
-    { id: 'subrecipe', label: 'Sub-Recipe', icon: <SubRecipeIcon /> },
-    { id: 'pricecalc', label: 'Harga Jual', icon: <PriceIcon /> },
+    { id: 'dashboard', label: t.nav_tab_dashboard },
+    { id: 'sales', label: t.nav_tab_sales },
+    { id: 'stock', label: t.nav_tab_stock },
   ]
 
-  const UsersIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" /></svg>
   const UserIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       {activeTab !== 'landing' && (
-        <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-200 shrink-0">
+        <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-b border-slate-200 dark:border-slate-700 shrink-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
-                <button onClick={() => setMobileNavOpen(v => !v)} className="btn-ghost p-2 lg:hidden">
+                <button onClick={() => setMobileNavOpen(v => !v)} className="btn-ghost p-2 lg:hidden dark:text-slate-300">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileNavOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} /></svg>
                 </button>
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">UI</div>
-                <span className="text-lg font-bold text-slate-800 hidden sm:block">UMKM Inventra</span>
+                <Logo size="sm" showText={true} dark={false} />
               </div>
 
               <div className="hidden lg:flex items-center gap-1">
                 {tabs.map(tab => (
-                  <button key={tab.id} onClick={() => { setActiveTab(tab.id); setMobileNavOpen(false) }} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === tab.id ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>
-                    {tab.icon}{tab.label}
+                  <button key={tab.id} onClick={() => { navigate(tabToPath[tab.id]); setMobileNavOpen(false) }}
+                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 border-b-2 ${
+                      activeTab === tab.id
+                        ? 'text-indigo-600 border-indigo-600'
+                        : 'text-gray-500 border-transparent hover:text-gray-700'
+                    }`}>
+                    {tab.label}
                   </button>
                 ))}
+                <div className="relative" onMouseEnter={() => setShowHppDropdown(true)} onMouseLeave={() => setShowHppDropdown(false)}>
+                  <button onClick={() => setShowHppDropdown(v => !v)}
+                    className={`flex items-center gap-1 px-3 py-2 text-sm font-medium transition-all duration-200 border-b-2 ${
+                      activeTab === 'subrecipe' || activeTab === 'pricecalc'
+                        ? 'text-indigo-600 border-indigo-600'
+                        : 'text-gray-500 border-transparent hover:text-gray-700'
+                    }`}>
+                    {t.nav_kelola_hpp}
+                    <FontAwesomeIcon icon={faChevronDown} className={`w-3 h-3 transition-transform ${showHppDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showHppDropdown && (
+                    <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                      <button onClick={() => { navigate('/sub-recipe'); setShowHppDropdown(false); setMobileNavOpen(false) }}
+                        className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors">
+                        {t.nav_tab_subrecipe}
+                      </button>
+                      <button onClick={() => { navigate('/harga-jual'); setShowHppDropdown(false); setMobileNavOpen(false) }}
+                        className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors">
+                        {t.nav_tab_pricecalc}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
                 {currentUser ? (
+                  <>
                   <div className="relative">
-                    <button onClick={() => setShowProfileMenu(v => !v)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white py-1.5 pl-1.5 pr-3 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-primary-300 hover:bg-primary-50 shadow-sm">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm">
+                    <button onClick={() => { setShowNotifications(v => !v); setShowProfileMenu(false) }}
+                      className="relative p-2 text-slate-500 hover:text-indigo-600 transition-colors duration-200 bg-transparent border-none shadow-none flex items-center justify-center">
+                      <FontAwesomeIcon icon={faBell} className="w-[18px] h-[18px]" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                          <span className="text-[9px] font-bold text-white leading-none">{unreadCount}</span>
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                  {showNotifications && (
+                    <div className="absolute top-14 right-44 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 animate-scale-in" onMouseDown={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                        <p className="text-sm font-semibold text-slate-800">Notifikasi</p>
+                        {unreadCount > 0 && (
+                          <button onClick={markAllNotificationsRead} className="text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors">Tandai semua telah dibaca</button>
+                        )}
+                      </div>
+                      <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="px-3 py-6 text-center text-sm text-slate-400">Tidak ada notifikasi</div>
+                        ) : (
+                          notifications.map(n => (
+                            <div key={n.id} className={`px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-colors ${n.read ? 'text-slate-500' : 'text-slate-700 bg-indigo-50/50'}`}>
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${n.read ? 'bg-transparent' : 'bg-indigo-500'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm">{n.text}</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">{n.time}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <button onClick={toggleTheme}
+                    className="p-2 text-slate-500 hover:text-indigo-600 transition-colors duration-200 bg-transparent border-none shadow-none flex items-center justify-center">
+                    <FontAwesomeIcon icon={displayPreferences.theme === 'dark' ? faSun : faMoon} className="w-[18px] h-[18px]" />
+                  </button>
+                  <div className="relative">
+                    <button onClick={() => setShowProfileMenu(v => !v)} className="flex items-center gap-x-2 bg-transparent border-none text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors duration-200 hover:text-indigo-600">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white">
                         {currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" /> : <UserIcon />}
                       </span>
                       <span className="max-w-[120px] truncate hidden sm:inline">{currentUser.businessName || currentUser.username}</span>
-                      <svg className={`h-4 w-4 text-slate-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      <svg className={`h-4 w-4 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     {showProfileMenu && (
-                      <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl animate-scale-in">
-                        <div className="px-4 py-3 border-b border-slate-100">
-                          <p className="text-sm font-semibold text-slate-800">{currentUser.fullName}</p>
-                          <p className="text-xs text-slate-400">@{currentUser.username}</p>
+                      <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-xl animate-scale-in">
+                        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{currentUser.fullName}</p>
+                          <p className="text-xs text-slate-400 dark:text-slate-400">@{currentUser.username}</p>
                         </div>
-                        <button onClick={() => { setActiveTab('profile'); setShowProfileMenu(false) }} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 transition-all hover:bg-primary-50 hover:text-primary-700"><UserIcon />Profil UMKM</button>
-                        <button onClick={() => { setActiveTab('settings'); setShowProfileMenu(false) }} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 transition-all hover:bg-primary-50 hover:text-primary-700"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>Pengaturan</button>
-                        <button onClick={() => { setActiveTab('settings'); setShowProfileMenu(false) }} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 transition-all hover:bg-primary-50 hover:text-primary-700"><UsersIcon />Akun & Profil</button>
-                        <button onClick={handleLogout} className="flex items-center gap-3 w-full border-t border-slate-100 px-4 py-3 text-sm font-medium text-red-600 transition-all hover:bg-red-50">
+                        <button onClick={() => { navigate('/profil'); setShowProfileMenu(false) }} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 transition-all hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700"><UserIcon />{t.profile_menu_profil}</button>
+                        <button onClick={() => { navigate('/pengaturan'); setShowProfileMenu(false) }} className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 transition-all hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>{t.profile_menu_settings}</button>
+                        <button onClick={handleLogout} className="flex items-center gap-3 w-full border-t border-slate-100 dark:border-slate-700 px-4 py-3 text-sm font-medium text-red-600 transition-all hover:bg-red-50 dark:hover:bg-red-900/20">
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                          Keluar
+                          {t.profile_menu_logout}
                         </button>
                       </div>
                     )}
                   </div>
+                  </>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => { setAuthMode('login'); setActiveTab('auth') }} className="btn-ghost text-sm">Masuk</button>
-                    <button onClick={() => { setAuthMode('register'); setActiveTab('auth') }} className="btn-primary text-sm">Daftar</button>
+                    <button onClick={() => navigate('/login')} className="btn-ghost text-sm dark:text-slate-300">{t.nav_masuk}</button>
+                    <button onClick={() => navigate('/register')} className="btn-primary text-sm">{t.nav_daftar}</button>
                   </div>
                 )}
               </div>
@@ -744,11 +941,11 @@ export default function App() {
           </div>
 
           {mobileNavOpen && (
-            <div className="lg:hidden border-t border-slate-200 bg-white animate-slide-down">
+            <div className="lg:hidden border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 animate-slide-down">
               <div className="px-4 py-3 space-y-1">
-                {tabs.map(tab => (
-                  <button key={tab.id} onClick={() => { setActiveTab(tab.id); setMobileNavOpen(false) }} className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-primary-50 text-primary-700' : 'text-slate-600 hover:bg-slate-50'}`}>
-                    {tab.icon}{tab.label}
+                {[...tabs, { id: 'subrecipe', label: t.nav_tab_subrecipe }, { id: 'pricecalc', label: t.nav_tab_pricecalc }].map(tab => (
+                  <button key={tab.id} onClick={() => { navigate(tabToPath[tab.id]); setMobileNavOpen(false) }} className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border-l-2 ${activeTab === tab.id ? 'text-indigo-600 border-indigo-600 bg-indigo-50/50' : 'text-slate-600 dark:text-slate-300 border-transparent hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                    {tab.label}
                   </button>
                 ))}
               </div>
@@ -757,70 +954,48 @@ export default function App() {
         </nav>
       )}
 
-      <div className="flex-1">
-        {activeTab === 'landing' && <Landing onEnter={(mode) => { if (mode === 'register') { setAuthMode('register'); setActiveTab('auth') } else { setActiveTab(currentUser ? 'dashboard' : 'auth') } }} />}
+      <div className="flex-1 flex flex-col">
+        {activeTab === 'landing' && <Landing onEnter={(mode) => { navigate(mode === 'register' ? '/register' : (currentUser ? '/dashboard' : '/login')) }} onNavigate={(tab) => navigate(tabToPath[tab])} lang={lang} setLang={setLang} />}
 
-        {activeTab !== 'landing' && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-            {activeTab === 'auth' && <AuthPage mode={authMode} onModeChange={setAuthMode} onLogin={handleLogin} onRegister={handleRegister} />}
-            {activeTab === 'profile' && currentUser && <ProfilePage currentUser={currentUser} onUpdateProfile={handleUpdateProfile} />}
+        {activeTab === 'auth' && (
+          <div className="flex-1 flex items-center justify-center px-4 py-12 lg:py-16">
+            <AuthPage mode={authMode} onModeChange={(mode) => navigate(mode === 'register' ? '/register' : '/login')} onLogin={handleLogin} onRegister={handleRegister} lang={lang} />
+          </div>
+        )}
+
+        {activeTab !== 'landing' && activeTab !== 'auth' && (
+          <div className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 lg:pt-16 pb-16 lg:pb-20">
+            {activeTab === 'profile' && currentUser && <ProfilePage currentUser={currentUser} onUpdateProfile={handleUpdateProfile} lang={lang} />}
             {activeTab === 'settings' && currentUser && (
-              <SettingsPage currentUser={currentUser} displayPreferences={displayPreferences} onChangePassword={handleChangePassword} onClearSession={handleClearSession} onClearAllUsers={handleClearAllUsers} onSaveDisplayPreferences={handleSaveDisplayPreferences} />
+              <SettingsPage currentUser={currentUser} displayPreferences={displayPreferences} onChangePassword={handleChangePassword} onClearSession={handleClearSession} onClearAllUsers={handleClearAllUsers} onSaveDisplayPreferences={handleSaveDisplayPreferences} lang={lang} />
             )}
 
             {activeTab === 'dashboard' && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h1 className="section-title">Dashboard</h1>
-                    <p className="section-desc">Ringkasan data kalkulator HPP</p>
-                  </div>
-                  {savedRecipes.length > 0 && (
-                    <button onClick={resetAllRecipes} className="btn-secondary text-sm">
-                      <TrashSmallIcon />
-                      Reset Semua Resep Dasar
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <KPICard title="Total Resep Dasar" value={savedRecipes.length} color="blue" icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
-                  <KPICard title="Total Produk Menu" value={products.length} color="emerald" icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} />
-                  <KPICard title="Total Tenaga Kerja" value={laborRows.filter(l => l.employee_name).length} color="amber" icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} />
-                  <KPICard title="Total Overhead" value={overheadRows.filter(o => o.name).length} color="rose" icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>} />
-                </div>
-
-                <div className="card p-6">
-                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Produk Terakhir Disimpan</h3>
-                  {products.length === 0 ? (
-                    <p className="text-slate-400 text-sm py-8 text-center">Belum ada produk tersimpan. Mulai hitung HPP produk Anda sekarang!</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {products.slice(-5).reverse().map(p => (
-                        <div key={p.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl hover:bg-primary-50 transition-colors">
-                          <span className="font-medium text-slate-700">{p.name}</span>
-                          <span className="text-primary-600 font-semibold">Rp {formatCurrency(p.total_food_cost)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <DashboardPage
+                currentUser={currentUser}
+                products={products}
+                inventoryRows={inventoryRows}
+                salesHistory={salesHistory}
+                salesSummary={salesSummary}
+                marginPct={marginPct}
+                onNavigate={navigate}
+                lang={lang}
+              />
             )}
 
             {activeTab === 'sales' && (
               <div className="space-y-6 animate-fade-in">
                 <div>
-                  <h1 className="section-title">Laporan Penjualan</h1>
-                  <p className="section-desc">Catat penjualan harian dan lihat laporan keuangan</p>
+                  <h1 className="section-title">{t.sales_title}</h1>
+                  <p className="section-desc">{t.sales_desc}</p>
                 </div>
 
                 <div className="card overflow-hidden">
                   <div className="card-gradient-header">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <h2 className="text-lg font-semibold text-slate-800">Input Penjualan Harian</h2>
+                      <h2 className="text-lg font-semibold text-slate-800">{t.sales_input_title}</h2>
                       <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-slate-600">Tanggal:</label>
+                        <label className="text-sm font-medium text-slate-600">{t.sales_label_date}</label>
                         <input type="date" value={salesDate} onChange={e => { setSalesDate(e.target.value); api.getSalesSummary(e.target.value).then(setSalesSummary).catch(() => {}); api.getSales(e.target.value).then(setSalesRows).catch(() => []) }} className="input-field w-auto py-1.5" />
                       </div>
                     </div>
@@ -828,7 +1003,7 @@ export default function App() {
                   <div className="p-5 space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Produk</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1.5">{t.sales_label_product}</label>
                         <select value={selectedProductId} onChange={async e => {
                           const id = e.target.value; setSelectedProductId(id)
                           if (!id) { setSelectedProduct(''); setProductHpp(null); return }
@@ -837,18 +1012,18 @@ export default function App() {
                           const hpp = await api.getProductHPP(id)
                           if (hpp && hpp.hpp) setProductHpp(hpp); else setProductHpp(null)
                         }} className="select-field">
-                          <option value="">-- Pilih Produk --</option>
+                          <option value="">{t.sales_placeholder_product}</option>
                           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Harga Jual / Porsi</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1.5">{t.sales_label_price}</label>
                         <div className="input-field bg-slate-50 font-semibold text-primary-700 flex items-center h-[42px]">
-                          {productHpp ? `Rp ${formatCurrency(productHpp.hpp)}` : (selectedProductId ? <span className="text-amber-600 text-xs">Hitung HPP dulu!</span> : '-')}
+                          {productHpp ? `${t.general_label_rupiah} ${formatCurrency(productHpp.hpp)}` : (selectedProductId ? <span className="text-amber-600 text-xs">{t.sales_hpp_warning}</span> : '-')}
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Stok Awal (Porsi)</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1.5">{t.sales_label_stock_awal}</label>
                         <input type="number" min="0" value={stokAwal} onChange={e => setStokAwal(parseInt(e.target.value) || 0)} className="input-field" />
                       </div>
                       <div>
@@ -1409,18 +1584,52 @@ export default function App() {
         </div>
       )}
 
-      <footer className="bg-white border-t border-slate-200 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-400">
-            <p>&copy; 2026 UMKM Inventra. All rights reserved.</p>
-            <div className="flex items-center gap-4">
-              <span className="hover:text-slate-600 cursor-pointer transition-colors">Kebijakan Privasi</span>
-              <span className="hover:text-slate-600 cursor-pointer transition-colors">Syarat & Ketentuan</span>
-              <span className="hover:text-slate-600 cursor-pointer transition-colors">Bantuan</span>
+      {activeTab !== 'landing' && (
+        <footer className="bg-slate-900 border-t border-slate-800 mt-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="flex flex-col gap-y-3">
+              <Logo size="xs" showText={true} dark={true} />
+              <p className="text-sm text-slate-400 leading-relaxed">{t.footer_desc}</p>
             </div>
+            <div>
+              <h5 className="font-semibold text-white mb-4">{t.footer_menu_title}</h5>
+              <ul className="grid grid-cols-2 gap-x-8 gap-y-2 max-w-xs text-sm text-slate-400">
+                {t.footer_menu.map((item, i) => (
+                  <li key={i} onClick={() => navigate(['/', '/dashboard', '/penjualan', '/stok', '/sub-recipe', '/harga-jual'][i])} className="hover:text-white transition-colors cursor-pointer">{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h5 className="font-semibold text-white mb-4">{t.footer_stats_title}</h5>
+              <ul className="space-y-2 text-sm text-slate-400">
+                {t.footer_stats.map((stat, i) => <li key={i}>{stat}</li>)}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-8 pt-8 border-t border-slate-800 text-center text-sm text-slate-500">
+            {t.footer_copyright}
           </div>
         </div>
       </footer>
+      )}
+
+      <div className="fixed bottom-6 right-6 z-[1000]">
+        <div className="relative">
+          {/* Help Center Widget Modal */}
+          <HelpCenterWidget lang={lang} isOpen={showFabContact} setIsOpen={setShowFabContact} />
+
+          <button onClick={() => setShowFabContact(v => !v)} className="w-14 h-14 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-lg hover:shadow-xl hover:scale-110 active:scale-95 transition-all duration-200 flex items-center justify-center relative before:absolute before:inset-0 before:rounded-full before:animate-ping before:bg-[#2563eb]/30">
+            <svg className="w-6 h-6" fill={showFabContact ? 'currentColor' : 'none'} stroke={showFabContact ? 'currentColor' : 'currentColor'} viewBox="0 0 24 24">
+              {showFabContact ? (
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              )}
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

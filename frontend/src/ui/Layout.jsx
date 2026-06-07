@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import Logo from './Logo'
 
 export function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -7,8 +8,7 @@ export function Layout({ children }) {
       <aside className={`fixed md:sticky top-0 left-0 z-40 h-screen bg-white border-r border-slate-200 transition-all duration-300 ${collapsed ? '-translate-x-full md:translate-x-0 md:w-20' : 'translate-x-0 w-64'}`}>
         <div className="flex flex-col h-full">
           <div className="flex items-center gap-3 px-5 h-16 border-b border-slate-100">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">UI</div>
-            {!collapsed && <div><div className="font-bold text-slate-800 text-sm">UMKM Inventra</div><div className="text-[10px] text-slate-400">Sistem HPP</div></div>}
+            <Logo size="sm" showText={!collapsed} />
           </div>
           <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
             <NavItem icon={<DashboardIcon />} label="Dashboard" collapsed={collapsed} />

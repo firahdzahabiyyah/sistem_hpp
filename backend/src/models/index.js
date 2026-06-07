@@ -17,7 +17,6 @@ const Overhead = require('./overhead')(sequelize, DataTypes);
 const DailySale = require('./dailySale')(sequelize, DataTypes);
 const Inventory = require('./inventory')(sequelize, DataTypes);
 
-// Associations
 Recipe.hasMany(RecipeDetail, { as: 'details', foreignKey: 'recipeId' });
 RecipeDetail.belongsTo(Recipe, { foreignKey: 'recipeId' });
 
