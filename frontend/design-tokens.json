@@ -1,0 +1,20 @@
+{
+  "colors":{
+    "primary":"#4f46e5",
+    "primary-600":"#4f46e5",
+    "accent":"#10b981",
+    "bg":"#f8fafc",
+    "surface":"#ffffff",
+    "text":"#0f172a",
+    "muted":"#6b7280"
+  },
+  "radius":{
+    "sm":"6px",
+    "md":"8px",
+    "lg":"12px",
+    "xl":"16px"
+  },
+  "shadow":{
+    "card":"0 6px 18px rgba(13,16,48,0.06)"
+  }
+}
